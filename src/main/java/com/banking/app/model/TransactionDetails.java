@@ -22,5 +22,7 @@ public class TransactionDetails {
     private long senderAccountNumber;
 
     private long receiverAccountNumber;
+
+    private String txnType;
 }
 

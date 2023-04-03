@@ -1,5 +1,6 @@
 package com.banking.app.service;
 
+import com.banking.app.constants.BankZDetails;
 import com.banking.app.dao.ApplicationDao;
 import com.banking.app.entity.BankAccount;
 import com.banking.app.entity.Customer;
@@ -10,7 +11,7 @@ import com.banking.app.exception.InsufficientFundException;
 import com.banking.app.model.GenericResponse;
 import com.banking.app.model.RegisterCustomer;
 import com.banking.app.model.TransactionDetails;
-import com.banking.app.model.TransactionHistory;
+import com.banking.app.repository.TransactionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -29,6 +30,8 @@ public class BankServiceImpl implements BankService {
 
     @Autowired
     private JavaMailSender javaMailSender;
+    @Autowired
+    private TransactionRepository transactionRepository;
 
     @Override
     public GenericResponse registerCustomer(RegisterCustomer registerCustomer) {
@@ -44,9 +47,26 @@ public class BankServiceImpl implements BankService {
 
     @Override
     public GenericResponse createTransaction(TransactionDetails transaction) {
+        Transaction newTransaction = applicationDao.createTransaction(transaction, "InProgress");
         try {
-            Customer sender = applicationDao.checkCustomerExist(transaction.getSenderPhoneNumber());
-            Customer receiver = applicationDao.checkCustomerExist(transaction.getReceiverPhoneNumber());
+            Customer sender = null;
+            Customer receiver = null;
+            if (transaction.getSenderPhoneNumber() == null && transaction.getTxnType().equalsIgnoreCase("credit")) {
+               sender = applicationDao.checkCustomerExist(BankZDetails.bankPhoneNumber);
+               transaction.setSenderPhoneNumber(BankZDetails.bankPhoneNumber);
+               transaction.setFromAccountType("CURRENT");
+            }
+            else { sender = applicationDao.checkCustomerExist(transaction.getSenderPhoneNumber());}
+
+            if (transaction.getReceiverPhoneNumber() == null && transaction.getTxnType().equalsIgnoreCase("debit")) {
+                receiver = applicationDao.checkCustomerExist(BankZDetails.bankPhoneNumber);
+                transaction.setReceiverPhoneNumber(BankZDetails.bankPhoneNumber);
+                transaction.setToAccountType("CURRENT");
+            }
+            else {
+                receiver = applicationDao.checkCustomerExist(transaction.getReceiverPhoneNumber());
+            }
+
             if (Objects.isNull(sender) || Objects.isNull(receiver))
                 throw new AccountNotFound("Customer with this phone number doesn't exist");
 
@@ -60,18 +80,17 @@ public class BankServiceImpl implements BankService {
             BankAccount receiverBankAccount = applicationDao.fetchCustomerAccount(transaction.getReceiverPhoneNumber(),
                     transaction.getToAccountType());
 
-            Transaction newTransaction = applicationDao.createTransaction(transaction, "InProgress");
-
             List<BankAccount> lockedAccounts = new ArrayList<>();
             lockedAccounts.add(sendersBankAccount);
             lockedAccounts.add(receiverBankAccount);
-            createVouchers(lockedAccounts, transaction);
+            createVouchers(lockedAccounts, transaction, newTransaction);
             applicationDao.updateTransactionStatus(newTransaction, "Success");
             sendEmail(sender.getEmail());
             sendEmail(receiver.getEmail());
             return new GenericResponse("Successful", 200, "Balance Transfer success", lockedAccounts);
         } catch (Exception e) {
             e.printStackTrace();
+            applicationDao.updateTransactionStatus(newTransaction, "Failed");
             throw new GenericException();
         }
     }
@@ -85,8 +104,7 @@ public class BankServiceImpl implements BankService {
             javaMailSender.send(simpleMailMessage);
         } catch (Exception e) {}
     }
-
-    public void createVouchers(List<BankAccount> bankAccounts, TransactionDetails transactionDetails) {
+    public void createVouchers(List<BankAccount> bankAccounts, TransactionDetails transactionDetails, Transaction transaction) {
 
         double senderBalance = bankAccounts.get(0).getAccountBalance();
         double receiverBalance = bankAccounts.get(1).getAccountBalance();
@@ -103,6 +121,7 @@ public class BankServiceImpl implements BankService {
             double receiverTempBalance = receiverBalance + txnAmount + interest;
             bankAccounts.get(1).setAccountBalance(receiverTempBalance);
         } else {
+            applicationDao.updateTransactionStatus(transaction, "Failed");
             throw new InsufficientFundException("Account has insufficient funds");
         }
         applicationDao.updateBalance(bankAccounts);
@@ -113,5 +132,9 @@ public class BankServiceImpl implements BankService {
         return new GenericResponse("Successful", 200, "All transactions", history);
     }
 
+    public GenericResponse createBulkTransaction(List<TransactionDetails> transactionDetailsList) {
+        transactionDetailsList.forEach(txn -> createTransaction(txn));
+        return new GenericResponse("Successful", 200, "Updated Transactions",null);
+    }
 
 }

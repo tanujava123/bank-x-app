@@ -79,6 +79,10 @@ public class ApplicationDao {
         return customerRepository.findByPhoneNumber(customerPhoneNumber);
     }
 
+    public BankAccount checkCustomerExist(long accountNumber) {
+        return bankRepository.findByAccountNumber(accountNumber);
+    }
+
     public BankAccount fetchCustomerAccount(String customerPhoneNumber, String accountType) {
         Customer customer = customerRepository.findByPhoneNumber(customerPhoneNumber);
         List<BankAccount> bankAccount = bankRepository.findAllByCustomer(customer);

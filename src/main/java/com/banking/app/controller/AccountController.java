@@ -8,6 +8,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 public class AccountController {
 
@@ -27,5 +29,17 @@ public class AccountController {
     @GetMapping("/history")
     public ResponseEntity<GenericResponse> txnHistory(@Validated @RequestParam("phoneNumber")String  phoneNumber) {
         return new ResponseEntity<>(bankService.fetchTransactionHistory(phoneNumber), HttpStatus.ACCEPTED);
+    }
+    @PostMapping("/creditAccount")
+    public ResponseEntity<GenericResponse> creditAccount(@Validated @RequestBody TransactionDetails transactionDetails) {
+        return new ResponseEntity<>(bankService.createTransaction(transactionDetails), HttpStatus.ACCEPTED);
+    }
+    @PostMapping("/debitAccount")
+    public ResponseEntity<GenericResponse> debitAccount(@Validated @RequestBody TransactionDetails transactionDetails) {
+        return new ResponseEntity<>(bankService.createTransaction(transactionDetails), HttpStatus.ACCEPTED);
+    }
+    @PostMapping("/bulkTransfer")
+    public  ResponseEntity<GenericResponse> bulkTransfer(@RequestBody List<TransactionDetails> transactionDetailsList) {
+        return new ResponseEntity<>(bankService.createBulkTransaction(transactionDetailsList), HttpStatus.ACCEPTED);
     }
 }
